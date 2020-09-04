@@ -24,6 +24,10 @@
 #define TINYSH_TOPCHAR '/'
 #endif
 
+#ifndef TINYSH_COMMANDCHAIN_MUTABLE
+#define TINYSH_COMMANDCHAIN_MUTABLE
+#endif
+
 namespace Shell
 {
   class TinySh;
@@ -37,8 +41,8 @@ namespace Shell
     const char *usage; /* usage string, can be 0 */
     CommandFunction_t function; /* function to launch on cmd, can be 0 */
     void *arg; /* current argument when function called */
-    const CommandDescription mutable *nextPtr; /* must be set to 0 at init, must be ~0 on array members, last array member must be 0 on init */
-    const CommandDescription mutable *child; /* must be set to 0 at init */
+    const CommandDescription TINYSH_COMMANDCHAIN_MUTABLE *nextPtr; /* must be set to 0 at init, must be ~0 on array members, last array member must be 0 on init */
+    const CommandDescription TINYSH_COMMANDCHAIN_MUTABLE *child; /* must be set to 0 at init */
 
     const CommandDescription* next() const;
   };
@@ -76,8 +80,8 @@ namespace Shell
     /* provide conversion string to scalar (decimal or hexadecimal) */
     static unsigned long atoxi(const char *s, bool isHex = false);
 
-    /* process new character input */
-    void checkInput();
+    /* process new character input, return true, if there was something to do */
+    bool checkInput();
 
     /* feed literal input characters as command script without echo and prompt*/
     void feed(const char* script);
@@ -109,20 +113,19 @@ namespace Shell
 
     char input_buffers[HISTORY_DEPTH][BUFFER_SIZE + 1];
     char trash_buffer[BUFFER_SIZE + 1];
-    int cur_buf_index;
     char context_buffer[BUFFER_SIZE + 1];
+    int cur_buf_index;
     int cur_context;
     int cursorPos;
-    int echo;
     const char *prompt;
     CommandDescription *root_cmd;
     const CommandDescription *cur_cmd_ctx;
     void *plusArg;
     void * const containerPtr;
-
-    bool cmdListIsWritable;
-
     ByteStream* ioStream;
+
+    bool echo;
+    bool cmdListIsWritable;
 
     void char_in(char c);
 
@@ -144,8 +147,6 @@ namespace Shell
   TinySh& TinySh::setIo(ByteStream& io_)
   {
     ioStream = &io_;
-    /* force prompt display by generating empty command */
-    char_in('\r');
 
     return *this;
   }
@@ -184,6 +185,15 @@ namespace Shell
     char_in('\n');
   }
 
+  inline
+  TinySh& TinySh::add_command(const CommandDescription* cmd, CommandDescription* parent)
+  {
+    add_command((CommandDescription*) cmd, parent);
+
+    cmdListIsWritable = false;
+
+    return *this;
+  }
 }
 
 #endif /* TINYSH_H_ */

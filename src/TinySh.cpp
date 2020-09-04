@@ -12,10 +12,11 @@ namespace Shell
 
 const CommandDescription TinySh::help_cmd_template = { "help", "display help", "<cr>", cmd_help, 0, 0, 0 };
 
-TinySh::TinySh(void * container) :
-      help_cmd(help_cmd_template), cur_buf_index(0), cur_context(0), cursorPos(0), echo(1), prompt("$ "), root_cmd(&help_cmd),
-      cur_cmd_ctx(0), plusArg(0), containerPtr(container),
-      cmdListIsWritable(true), ioStream(0)
+TinySh::TinySh(void * container)
+: help_cmd(help_cmd_template), cur_buf_index(0), cur_context(0), cursorPos(0),
+  prompt("$ "), root_cmd(&help_cmd),
+  cur_cmd_ctx(0), plusArg(0), containerPtr(container), ioStream(nullptr),
+  echo(1), cmdListIsWritable(true)
 {
   unsigned i;
 
@@ -46,7 +47,7 @@ static int tinysh_strlen(const char *s)
 
 /* callback for help function
  */
-void TinySh::cmd_help(TinySh& shell, int argc, const char **argv)
+void TinySh::cmd_help(TinySh& shell, int, const char **)
 {
   shell.io().writeBlock("?            display help on given or available commands\n");
   shell.io().writeBlock("<TAB>        auto-completion\n");
@@ -491,6 +492,8 @@ void TinySh::start_of_line()
 /* new character input */
 void TinySh::char_in(char c)
 {
+  assert(ioStream);
+
   char *line = input_buffers[cur_buf_index];
 
   if (c == '\n' || c == '\r') /* validate command */
@@ -603,13 +606,13 @@ void TinySh::char_in(char c)
 /* add a new command */
 Shell::TinySh& TinySh::add_command(CommandDescription *cmd, CommandDescription *parent)
 {
-  const CommandDescription *cm;
+  CommandDescription *cm;
 
   assert(cmdListIsWritable); // oder es wurde ein Kommando (eine Liste) const hinzugefügt, danach ist die gesamte Liste readonly
 
   if (parent)
   {
-    cm = parent->child;
+    cm = const_cast<CommandDescription*>(parent->child);
     if (!cm)
     {
       parent->child = cmd;
@@ -617,7 +620,7 @@ Shell::TinySh& TinySh::add_command(CommandDescription *cmd, CommandDescription *
     else
     {
       while (cm->nextPtr)
-        cm = cm->next();
+        cm = const_cast<CommandDescription*>(cm->next());
       cm->nextPtr = cmd;
     }
   }
@@ -629,18 +632,9 @@ Shell::TinySh& TinySh::add_command(CommandDescription *cmd, CommandDescription *
   {
     cm = root_cmd;
     while (cm->nextPtr)
-      cm = cm->next();
+      cm = const_cast<CommandDescription*>(cm->next());
     cm->nextPtr = cmd;
   }
-
-  return *this;
-}
-
-TinySh& TinySh::add_command(const CommandDescription* cmd, CommandDescription* parent)
-{
-  add_command((CommandDescription*) cmd, parent);
-
-  cmdListIsWritable = false;
 
   return *this;
 }
@@ -683,16 +677,20 @@ unsigned long TinySh::atoxi(const char *s, bool isHex)
   return res;
 }
 
-void TinySh::checkInput()
+bool TinySh::checkInput()
 {
   assert(0 != ioStream); // erst setIo() ausführen, bevor die ersten Ausgaben gemacht werden
 
   char c;
+  bool hadInput = false;
 
   if (ioStream->read(c))
   {
     char_in(c);
+    hadInput = true;
   }
+
+  return hadInput;
 }
 
 void TinySh::feed(const char* script)
